@@ -1,6 +1,10 @@
 import os
 import requests
 from flask import Flask, request, jsonify
+import urllib3
+
+# ปิดเตือนเรื่อง SSL ซีเคียวริตี้ที่ไม่จำเป็นบนคลาวด์
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 app = Flask(__name__)
 
@@ -17,7 +21,6 @@ def get_audio():
 
         youtube_url = data['url']
 
-        # ใช้ Cobalt API ในการดึงลิงก์สตรีมเสียง (เสถียรและไม่โดนบล็อกง่ายบนคลาวด์)
         cobalt_instances = [
             "https://co.wuk.sh/api/json",
             "https://cobalt.api.red,stone.cx",
@@ -41,14 +44,15 @@ def get_audio():
 
         for instance in cobalt_instances:
             try:
-                res = requests.post(instance, json=payload, headers=headers, timeout=6)
+                # เพิ่ม verify=False เพื่อข้ามปัญหา SSL บนเซิร์ฟเวอร์คลาวด์
+                res = requests.post(instance, json=payload, headers=headers, verify=False, timeout=6)
                 if res.status_code == 200:
                     res_data = res.json()
                     if res_data.get("status") in ["stream", "redirect", "success"]:
                         audio_url = res_data.get("url")
                         break
                     elif "text" in res_data:
-                        audio_url = res_data.get("text") # บางกรณี cobalt ส่งมาเป็นลิงก์ตรงในฟิลด์ text
+                        audio_url = res_data.get("text")
                         break
                 else:
                     last_error = f"Cobalt returned status {res.status_code}"
