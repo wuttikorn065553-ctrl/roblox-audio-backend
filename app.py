@@ -1,15 +1,12 @@
 import os
-import requests
 from flask import Flask, request, jsonify
-import urllib3
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+import yt_dlp
 
 app = Flask(__name__)
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Roblox Audio Proxy (v11) is running!", 200
+    return "Roblox Audio Direct yt-dlp Backend is running!", 200
 
 @app.route('/get-audio', methods=['POST'])
 def get_audio():
@@ -19,65 +16,43 @@ def get_audio():
             return jsonify({'success': False, 'error': 'Missing youtube url'}), 400
 
         youtube_url = data['url']
-        audio_url = None
-        title = "Unknown Title"
-        last_error = ""
 
-        # ใช้ Endpoint ทางเลือกที่รองรับการแปลงและดึงสตรีมล่าสุด
-        api_endpoints = [
-            f"https://api.siputzx.my.id/api/d/ytmp3?url={youtube_url}"
-        ]
+        # ตั้งค่า yt-dlp เพื่อดึงเฉพาะลิงก์เสียงตรง
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'noplaylist': True,
+            'quiet': True,
+            'no_warnings': True,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'web']
+                }
+            }
+        }
 
-        for api_url in api_endpoints:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
-                res = requests.get(api_url, verify=False, timeout=8)
-                if res.status_code == 200:
-                    # บางครั้ง API คืนค่าเป็นข้อความธรรมดาหรือ JSON ที่มีปัญหา ให้ลองเช็ค text ดูก่อน
-                    if "application/json" in res.headers.get("Content-Type", ""):
-                        res_data = res.json()
-                        d = res_data.get("data") or res_data.get("result") or res_data
-                        if isinstance(d, dict):
-                            audio_url = d.get("download") or d.get("dl") or d.get("url") or d.get("download_url")
-                            title = d.get("title", "Unknown Title")
-                    
-                    if audio_url:
-                        break
-                else:
-                    last_error = f"API returned status {res.status_code}"
+                info = ydl.extract_info(youtube_url, download=False)
             except Exception as e:
-                last_error = str(e)
-                continue
+                return jsonify({'success': False, 'error': f'Extraction failed: {str(e)}'}), 500
 
-        # กรณีถ้า API หลักพลาด เราจะใช้ fallback สำรองแบบดึงสตรีมตรงผ่าน invidious สาธารณะที่ยังเปิดอยู่
-        if not audio_url:
-            try:
-                video_id = None
-                if "v=" in youtube_url:
-                    video_id = youtube_url.split("v=")[1].split("&")[0]
-                elif "youtu.be/" in youtube_url:
-                    video_id = youtube_url.split("youtu.be/")[1].split("?")[0]
-                
-                if video_id:
-                    inv_res = requests.get(f"https://invidious.projectsegfau.lt/api/v1/videos/{video_id}", timeout=5)
-                    if inv_res.status_code == 200:
-                        inv_data = inv_res.json()
-                        title = inv_data.get('title', 'Unknown Title')
-                        for stream in inv_data.get('adaptiveFormats', []):
-                            if 'audio' in stream.get('type', ''):
-                                audio_url = stream.get('url')
-                                break
-            except Exception as ex:
-                last_error = f"Fallback error: {str(ex)}"
+            title = info.get('title', 'Unknown Title')
+            audio_url = info.get('url')
 
-        if not audio_url:
-            print(f"Extraction failed. Last error: {last_error}")
-            return jsonify({'success': False, 'error': f'Failed: {last_error}'}), 500
+            if not audio_url and 'formats' in info:
+                for f in info['formats']:
+                    if f.get('acodec') != 'none' and f.get('vcodec') == 'none':
+                        audio_url = f.get('url')
+                        break
 
-        return jsonify({
-            'success': True,
-            'title': title,
-            'audioUrl': audio_url
-        })
+            if not audio_url:
+                return jsonify({'success': False, 'error': 'Could not extract audio stream URL'}), 500
+
+            return jsonify({
+                'success': True,
+                'title': title,
+                'audioUrl': audio_url
+            })
 
     except Exception as e:
         print(f"Server Error: {str(e)}")
