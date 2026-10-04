@@ -6,7 +6,7 @@ app = Flask(__name__)
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Roblox Invidious Proxy is running!", 200
+    return "Roblox Audio Proxy is running!", 200
 
 @app.route('/get-audio', methods=['POST'])
 def get_audio():
@@ -17,19 +17,24 @@ def get_audio():
 
         youtube_url = data['url']
         
-        # แยกดึง Video ID ออกมาจากลิงก์ YouTube
+        # แยกดึง Video ID ออกมาจากลิงก์ YouTube ทุกรูปแบบ
+        video_id = None
         if "v=" in youtube_url:
             video_id = youtube_url.split("v=")[1].split("&")[0]
         elif "youtu.be/" in youtube_url:
             video_id = youtube_url.split("youtu.be/")[1].split("?")[0]
-        else:
+        elif "embed/" in youtube_url:
+            video_id = youtube_url.split("embed/")[1].split("?")[0]
+            
+        if not video_id:
             return jsonify({'success': False, 'error': 'Invalid YouTube URL'}), 400
 
-        # รายชื่อ Invidious Public Instances สำรอง
+        # รายชื่อ Invidious Instances สำรองที่เสถียร
         invidious_instances = [
-            "https://invidious.privacyredirect.com",
+            "https://invidious.perennialte.ch",
             "https://vid.puffyan.us",
-            "https://inv.nadeko.net"
+            "https://inv.nadeko.net",
+            "https://invidious.privacyredirect.com"
         ]
 
         audio_url = None
@@ -37,13 +42,13 @@ def get_audio():
 
         for instance in invidious_instances:
             try:
-                res = requests.get(f"{instance}/api/v1/videos/{video_id}", timeout=5)
+                res = requests.get(f"{instance}/api/v1/videos/{video_id}", timeout=4)
                 if res.status_code == 200:
                     vid_data = res.json()
                     title = vid_data.get('title', 'Unknown Title')
                     adaptive_formats = vid_data.get('adaptiveFormats', [])
                     
-                    # ค้นหาลิงก์สตรีมเสียงที่ดีที่สุด
+                    # กรองหาลิงก์เสียงที่ดีที่สุด
                     for f in adaptive_formats:
                         if 'audio' in f.get('type', ''):
                             audio_url = f.get('url')
@@ -54,7 +59,7 @@ def get_audio():
                 continue
 
         if not audio_url:
-            return jsonify({'success': False, 'error': 'Could not extract audio stream'}), 500
+            return jsonify({'success': False, 'error': 'Could not extract audio stream from all instances'}), 500
 
         return jsonify({
             'success': True,
