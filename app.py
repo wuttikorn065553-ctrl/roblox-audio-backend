@@ -6,7 +6,7 @@ app = Flask(__name__)
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Roblox Audio Backend (v7) is running!", 200
+    return "Roblox Audio Backend (Cookies Auth) is running!", 200
 
 @app.route('/get-audio', methods=['POST'])
 def get_audio():
@@ -17,7 +17,8 @@ def get_audio():
 
         youtube_url = data['url']
 
-        # ตั้งค่า yt-dlp โดยใช้ client เป็น ios / tv เพื่อเลี่ยงการบล็อก IP บนคลาวด์
+        # เช็คว่ามีไฟล์ cookies.txt อยู่ไหม
+        cookie_file = 'cookies.txt'
         ydl_opts = {
             'format': 'bestaudio/best',
             'noplaylist': True,
@@ -29,6 +30,9 @@ def get_audio():
                 }
             }
         }
+
+        if os.path.exists(cookie_file):
+            ydl_opts['cookiefile'] = cookie_file
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
