@@ -9,7 +9,7 @@ app = Flask(__name__)
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Roblox Multi-Invidious Audio Proxy is running!", 200
+    return "Roblox Audio Proxy (Safe JSON) is running!", 200
 
 @app.route('/get-audio', methods=['POST'])
 def get_audio():
@@ -20,7 +20,6 @@ def get_audio():
 
         youtube_url = data['url']
 
-        # ดึง Video ID ออกมาจากลิงก์
         video_id = None
         if "v=" in youtube_url:
             video_id = youtube_url.split("v=")[1].split("&")[0]
@@ -32,12 +31,10 @@ def get_audio():
         if not video_id:
             return jsonify({'success': False, 'error': 'Invalid YouTube URL'}), 400
 
-        # รายชื่อ Invidious Instances สำรอง
         instances = [
             "https://vid.priv.au",
             "https://invidious.projectsegfau.lt",
-            "https://iv.datura.network",
-            "https://invidious.io.lol"
+            "https://iv.datura.network"
         ]
 
         audio_url = None
@@ -50,12 +47,13 @@ def get_audio():
 
         for instance in instances:
             try:
-                res = requests.get(f"{instance}/api/v1/videos/{video_id}", headers=headers, verify=False, timeout=5)
-                if res.status_code == 200:
+                res = requests.get(f"{instance}/api/v1/videos/{video_id}", headers=headers, verify=False, timeout=6)
+                
+                # เช็คว่าสถานะ 200 และเนื้อหาไม่ใช่ HTML (ป้องกันหน้าเว็บ error แจ้ง JSONDecodeError)
+                if res.status_code == 200 and "application/json" in res.headers.get("Content-Type", ""):
                     res_data = res.json()
                     title = res_data.get('title', 'Unknown Title')
                     
-                    # ค้นหาลิงก์เสียงจาก adaptiveFormats
                     adaptive_streams = res_data.get('adaptiveFormats', [])
                     for stream in adaptive_streams:
                         if 'audio' in stream.get('type', ''):
@@ -65,7 +63,7 @@ def get_audio():
                     if audio_url:
                         break
                 else:
-                    last_error = f"Instance {instance} status {res.status_code}"
+                    last_error = f"Instance {instance} returned non-json or status {res.status_code}"
             except Exception as e:
                 last_error = str(e)
                 continue
