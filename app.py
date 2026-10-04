@@ -6,7 +6,7 @@ app = Flask(__name__)
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Roblox Audio Proxy is running!", 200
+    return "Roblox Cobalt Audio Proxy is running!", 200
 
 @app.route('/get-audio', methods=['POST'])
 def get_audio():
@@ -16,53 +16,48 @@ def get_audio():
             return jsonify({'success': False, 'error': 'Missing youtube url'}), 400
 
         youtube_url = data['url']
-        
-        # แยกดึง Video ID ออกมาจากลิงก์ YouTube ทุกรูปแบบ
-        video_id = None
-        if "v=" in youtube_url:
-            video_id = youtube_url.split("v=")[1].split("&")[0]
-        elif "youtu.be/" in youtube_url:
-            video_id = youtube_url.split("youtu.be/")[1].split("?")[0]
-        elif "embed/" in youtube_url:
-            video_id = youtube_url.split("embed/")[1].split("?")[0]
-            
-        if not video_id:
-            return jsonify({'success': False, 'error': 'Invalid YouTube URL'}), 400
 
-        # รายชื่อ Invidious Instances สำรอง
-        invidious_instances = [
-            "https://invidious.perennialte.ch",
-            "https://vid.puffyan.us",
-            "https://inv.nadeko.net",
-            "https://invidious.privacyredirect.com"
+        # ใช้ Cobalt API ในการดึงลิงก์สตรีมเสียง (เสถียรและไม่โดนบล็อกง่ายบนคลาวด์)
+        cobalt_instances = [
+            "https://co.wuk.sh/api/json",
+            "https://cobalt.api.red,stone.cx",
+            "https://api.cobalt.best"
         ]
 
         audio_url = None
         title = "Unknown Title"
         last_error = ""
 
-        for instance in invidious_instances:
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "url": youtube_url,
+            "downloadMode": "audio",
+            "audioFormat": "mp3"
+        }
+
+        for instance in cobalt_instances:
             try:
-                res = requests.get(f"{instance}/api/v1/videos/{video_id}", timeout=4)
+                res = requests.post(instance, json=payload, headers=headers, timeout=6)
                 if res.status_code == 200:
-                    vid_data = res.json()
-                    title = vid_data.get('title', 'Unknown Title')
-                    adaptive_formats = vid_data.get('adaptiveFormats', [])
-                    
-                    for f in adaptive_formats:
-                        if 'audio' in f.get('type', ''):
-                            audio_url = f.get('url')
-                            break
-                    if audio_url:
+                    res_data = res.json()
+                    if res_data.get("status") in ["stream", "redirect", "success"]:
+                        audio_url = res_data.get("url")
+                        break
+                    elif "text" in res_data:
+                        audio_url = res_data.get("text") # บางกรณี cobalt ส่งมาเป็นลิงก์ตรงในฟิลด์ text
                         break
                 else:
-                    last_error = f"Instance {instance} returned status {res.status_code}"
+                    last_error = f"Cobalt returned status {res.status_code}"
             except Exception as e:
                 last_error = str(e)
                 continue
 
         if not audio_url:
-            print(f"Extraction failed. Last error: {last_error}")
+            print(f"Cobalt extraction failed. Last error: {last_error}")
             return jsonify({'success': False, 'error': f'Failed: {last_error}'}), 500
 
         return jsonify({
