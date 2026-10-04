@@ -1,15 +1,12 @@
 import os
-import requests
 from flask import Flask, request, jsonify
-import urllib3
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+import yt_dlp
 
 app = Flask(__name__)
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Roblox Audio Proxy (v5) is running!", 200
+    return "Roblox Audio Cloud Worker is running!", 200
 
 @app.route('/get-audio', methods=['POST'])
 def get_audio():
@@ -20,56 +17,40 @@ def get_audio():
 
         youtube_url = data['url']
 
-        # ดึง Video ID เผื่อใช้กับ API สำรองตัวอื่น
-        video_id = None
-        if "v=" in youtube_url:
-            video_id = youtube_url.split("v=")[1].split("&")[0]
-        elif "youtu.be/" in youtube_url:
-            video_id = youtube_url.split("youtu.be/")[1].split("?")[0]
+        # ตั้งค่า yt-dlp ให้ดึงเฉพาะลิงก์สตรีมเสียงตรง (Direct Audio URL) บนคลาวด์
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'noplaylist': True,
+            'quiet': True,
+            'no_warnings': True,
+            # ใช้ client จำลองเพื่อเลี่ยงการบล็อกบนคลาวด์
+            'extractor_args': {'youtube': {'player_client': ['android', 'web']}}
+        }
 
-        audio_url = None
-        title = "Unknown Title"
-        last_error = ""
-
-        # รายชื่อ Public APIs ทางเลือก
-        apis = [
-            f"https://apis.davidcyriltech.my.id/youtube/mp3?url={youtube_url}",
-            f"https://api.siputzx.my.id/api/d/ytmp3?url={youtube_url}"
-        ]
-
-        for api_url in apis:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
-                res = requests.get(api_url, verify=False, timeout=8)
-                if res.status_code == 200:
-                    res_data = res.json()
-                    
-                    # ตรวจสอบโครงสร้างข้อมูลที่ส่งกลับมาจากแต่ละ API
-                    if "data" in res_data and isinstance(res_data["data"], dict):
-                        d = res_data["data"]
-                        audio_url = d.get("download") or d.get("dl") or d.get("url")
-                        title = d.get("title", "Unknown Title")
-                    elif "result" in res_data and isinstance(res_data["result"], dict):
-                        d = res_data["result"]
-                        audio_url = d.get("download_url") or d.get("link") or d.get("url")
-                        title = d.get("title", "Unknown Title")
-                        
-                    if audio_url:
-                        break
-                else:
-                    last_error = f"API returned status {res.status_code}"
+                info = ydl.extract_info(youtube_url, download=False)
             except Exception as e:
-                last_error = str(e)
-                continue
+                return jsonify({'success': False, 'error': f'Extraction error: {str(e)}'}), 500
 
-        if not audio_url:
-            print(f"Extraction failed. Last error: {last_error}")
-            return jsonify({'success': False, 'error': f'Failed: {last_error}'}), 500
+            title = info.get('title', 'Unknown Title')
+            audio_url = info.get('url')
 
-        return jsonify({
-            'success': True,
-            'title': title,
-            'audioUrl': audio_url
-        })
+            # หากไม่ได้ลิงก์ตรงจาก info แนะนำให้หาจาก formats
+            if not audio_url and 'formats' in info:
+                for f in info['formats']:
+                    if f.get('acodec') != 'none' and f.get('vcodec') == 'none':
+                        audio_url = f.get('url')
+                        break
+
+            if not audio_url:
+                return jsonify({'success': False, 'error': 'Could not extract direct audio stream URL'}), 500
+
+            return jsonify({
+                'success': True,
+                'title': title,
+                'audioUrl': audio_url
+            })
 
     except Exception as e:
         print(f"Server Error: {str(e)}")
