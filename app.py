@@ -32,7 +32,7 @@ def get_audio():
         if not video_id:
             return jsonify({'success': False, 'error': 'Invalid YouTube URL'}), 400
 
-        # รายชื่อ Piped API Instances ที่เสถียรและใช้งานได้ดี
+        # รายชื่อ Piped API Instances
         piped_instances = [
             "https://pipedapi.kavin.rocks",
             "https://pipedapi.drgns.space",
@@ -44,24 +44,33 @@ def get_audio():
         last_error = ""
 
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+            "Accept": "application/json"
         }
 
         for instance in piped_instances:
             try:
                 res = requests.get(f"{instance}/streams/{video_id}", headers=headers, verify=False, timeout=6)
+                
                 if res.status_code == 200:
-                    res_data = res.json()
+                    # เช็กก่อนว่าเป็น JSON จริงๆ หรือไม่
+                    try:
+                        res_data = res.json()
+                    except Exception:
+                        last_error = f"Instance {instance} returned non-JSON: {res.text[:120]}"
+                        continue
+
                     title = res_data.get('title', 'Unknown Title')
                     audio_streams = res_data.get('audioStreams', [])
                     
                     if audio_streams:
-                        # เลือกสตรีมเสียงคุณภาพดีที่สุดที่มีลิงก์ตรง
                         audio_url = audio_streams[0].get('url')
                         if audio_url:
                             break
+                    else:
+                        last_error = f"Instance {instance} returned no audioStreams data"
                 else:
-                    last_error = f"Piped instance {instance} returned status {res.status_code}"
+                    last_error = f"Instance {instance} status {res.status_code}: {res.text[:100]}"
             except Exception as e:
                 last_error = str(e)
                 continue
