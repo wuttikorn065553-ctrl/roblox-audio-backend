@@ -1,12 +1,15 @@
 import os
+import requests
 from flask import Flask, request, jsonify
-import yt_dlp
+import urllib3
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 app = Flask(__name__)
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Roblox Audio Direct yt-dlp Backend is running!", 200
+    return "Roblox Audio Proxy (No-Bot v12) is running!", 200
 
 @app.route('/get-audio', methods=['POST'])
 def get_audio():
@@ -16,43 +19,44 @@ def get_audio():
             return jsonify({'success': False, 'error': 'Missing youtube url'}), 400
 
         youtube_url = data['url']
+        audio_url = None
+        title = "Unknown Title"
+        last_error = ""
 
-        # ตั้งค่า yt-dlp เพื่อดึงเฉพาะลิงก์เสียงตรง
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'noplaylist': True,
-            'quiet': True,
-            'no_warnings': True,
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['android', 'web']
-                }
-            }
-        }
+        # ใช้ Endpoint ทางเลือกสำหรับแปลงลิงก์เพลงผ่านระบบคลาวด์ภายนอกที่เลี่ยงบอทได้
+        api_endpoints = [
+            f"https://deliriussapi-oficial.vercel.app/download/ytmp3?url={youtube_url}",
+            f"https://api.siputzx.my.id/api/d/ytmp3?url={youtube_url}"
+        ]
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        for api_url in api_endpoints:
             try:
-                info = ydl.extract_info(youtube_url, download=False)
-            except Exception as e:
-                return jsonify({'success': False, 'error': f'Extraction failed: {str(e)}'}), 500
-
-            title = info.get('title', 'Unknown Title')
-            audio_url = info.get('url')
-
-            if not audio_url and 'formats' in info:
-                for f in info['formats']:
-                    if f.get('acodec') != 'none' and f.get('vcodec') == 'none':
-                        audio_url = f.get('url')
+                res = requests.get(api_url, verify=False, timeout=10)
+                if res.status_code == 200:
+                    if "application/json" in res.headers.get("Content-Type", ""):
+                        res_data = res.json()
+                        d = res_data.get("data") or res_data.get("result") or res_data
+                        if isinstance(d, dict):
+                            audio_url = d.get("download") or d.get("dl") or d.get("url") or d.get("download_url")
+                            title = d.get("title", "Unknown Title")
+                    
+                    if audio_url:
                         break
+                else:
+                    last_error = f"API status {res.status_code}"
+            except Exception as e:
+                last_error = str(e)
+                continue
 
-            if not audio_url:
-                return jsonify({'success': False, 'error': 'Could not extract audio stream URL'}), 500
+        if not audio_url:
+            print(f"Extraction failed. Last error: {last_error}")
+            return jsonify({'success': False, 'error': f'Failed: {last_error}'}), 500
 
-            return jsonify({
-                'success': True,
-                'title': title,
-                'audioUrl': audio_url
-            })
+        return jsonify({
+            'success': True,
+            'title': title,
+            'audioUrl': audio_url
+        })
 
     except Exception as e:
         print(f"Server Error: {str(e)}")
