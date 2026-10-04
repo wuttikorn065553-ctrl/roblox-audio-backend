@@ -1,12 +1,12 @@
 import os
+import requests
 from flask import Flask, request, jsonify
-import yt_dlp
 
 app = Flask(__name__)
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Roblox YouTube Audio Proxy is running!", 200
+    return "Roblox Invidious Proxy is running!", 200
 
 @app.route('/get-audio', methods=['POST'])
 def get_audio():
@@ -16,31 +16,42 @@ def get_audio():
             return jsonify({'success': False, 'error': 'Missing youtube url'}), 400
 
         youtube_url = data['url']
+        
+        # แยกดึง Video ID ออกมาจากลิงก์ YouTube
+        if "v=" in youtube_url:
+            video_id = youtube_url.split("v=")[1].split("&")[0]
+        elif "youtu.be/" in youtube_url:
+            video_id = youtube_url.split("youtu.be/")[1].split("?")[0]
+        else:
+            return jsonify({'success': False, 'error': 'Invalid YouTube URL'}), 400
 
-        # ตั้งค่า yt-dlp พร้อมคุกกี้และจำลอง User-Agent ของเบราว์เซอร์จริงเพื่อเลี่ยงการบล็อก
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'noplaylist': True,
-            'quiet': True,
-            'no_warnings': True,
-            'cookiefile': 'youtube.com_cookies.txt',
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-us,en;q=0.5',
-                'Sec-Fetch-Mode': 'navigate',
-            },
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['web', 'android']
-                }
-            }
-        }
+        # รายชื่อ Invidious Public Instances สำรอง
+        invidious_instances = [
+            "https://invidious.privacyredirect.com",
+            "https://vid.puffyan.us",
+            "https://inv.nadeko.net"
+        ]
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(youtube_url, download=False)
-            audio_url = info.get('url')
-            title = info.get('title', 'Unknown Title')
+        audio_url = None
+        title = "Unknown Title"
+
+        for instance in invidious_instances:
+            try:
+                res = requests.get(f"{instance}/api/v1/videos/{video_id}", timeout=5)
+                if res.status_code == 200:
+                    vid_data = res.json()
+                    title = vid_data.get('title', 'Unknown Title')
+                    adaptive_formats = vid_data.get('adaptiveFormats', [])
+                    
+                    # ค้นหาลิงก์สตรีมเสียงที่ดีที่สุด
+                    for f in adaptive_formats:
+                        if 'audio' in f.get('type', ''):
+                            audio_url = f.get('url')
+                            break
+                    if audio_url:
+                        break
+            except Exception:
+                continue
 
         if not audio_url:
             return jsonify({'success': False, 'error': 'Could not extract audio stream'}), 500
@@ -52,9 +63,7 @@ def get_audio():
         })
 
     except Exception as e:
-        error_msg = str(e)
-        print(f"Detailed Error: {error_msg}")
-        return jsonify({'success': False, 'error': error_msg}), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
