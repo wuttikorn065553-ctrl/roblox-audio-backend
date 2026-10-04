@@ -17,12 +17,17 @@ def get_audio():
 
         youtube_url = data['url']
 
-        # ตั้งค่า yt-dlp ให้รองรับการดึงข้อมูลที่เสถียรขึ้น
+        # เพิ่ม player_client เป็น android เพื่อเลี่ยงการบล็อกบนคลาวด์
         ydl_opts = {
             'format': 'bestaudio/best',
             'noplaylist': True,
             'quiet': True,
             'no_warnings': True,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'web']
+                }
+            }
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -40,9 +45,9 @@ def get_audio():
         })
 
     except Exception as e:
-        # พิมพ์ Error ลงใน Console ของ Render เพื่อให้เราเช็คได้ง่ายขึ้น
-        print(f"Error extracting audio: {str(e)}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        error_msg = str(e)
+        print(f"Detailed Error: {error_msg}")
+        return jsonify({'success': False, 'error': error_msg}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
