@@ -9,7 +9,7 @@ app = Flask(__name__)
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Roblox Audio Proxy (Stable v10) is running!", 200
+    return "Roblox Audio Proxy (v11) is running!", 200
 
 @app.route('/get-audio', methods=['POST'])
 def get_audio():
@@ -23,24 +23,23 @@ def get_audio():
         title = "Unknown Title"
         last_error = ""
 
-        # ใช้บริการดึงลิงก์ผ่าน API สาธารณะที่อัปเดตสตรีมตรง
+        # ใช้ Endpoint ทางเลือกที่รองรับการแปลงและดึงสตรีมล่าสุด
         api_endpoints = [
-            f"https://deliriussapi-oficial.vercel.app/download/ytmp3?url={youtube_url}",
             f"https://api.siputzx.my.id/api/d/ytmp3?url={youtube_url}"
         ]
 
         for api_url in api_endpoints:
             try:
                 res = requests.get(api_url, verify=False, timeout=8)
-                if res.status_code == 200 and "application/json" in res.headers.get("Content-Type", ""):
-                    res_data = res.json()
+                if res.status_code == 200:
+                    # บางครั้ง API คืนค่าเป็นข้อความธรรมดาหรือ JSON ที่มีปัญหา ให้ลองเช็ค text ดูก่อน
+                    if "application/json" in res.headers.get("Content-Type", ""):
+                        res_data = res.json()
+                        d = res_data.get("data") or res_data.get("result") or res_data
+                        if isinstance(d, dict):
+                            audio_url = d.get("download") or d.get("dl") or d.get("url") or d.get("download_url")
+                            title = d.get("title", "Unknown Title")
                     
-                    # แกะโครงสร้างข้อมูลตามรูปแบบมาตรฐาน
-                    d = res_data.get("data") or res_data.get("result") or res_data
-                    if isinstance(d, dict):
-                        audio_url = d.get("download") or d.get("dl") or d.get("url") or d.get("download_url")
-                        title = d.get("title", "Unknown Title")
-                        
                     if audio_url:
                         break
                 else:
@@ -48,6 +47,27 @@ def get_audio():
             except Exception as e:
                 last_error = str(e)
                 continue
+
+        # กรณีถ้า API หลักพลาด เราจะใช้ fallback สำรองแบบดึงสตรีมตรงผ่าน invidious สาธารณะที่ยังเปิดอยู่
+        if not audio_url:
+            try:
+                video_id = None
+                if "v=" in youtube_url:
+                    video_id = youtube_url.split("v=")[1].split("&")[0]
+                elif "youtu.be/" in youtube_url:
+                    video_id = youtube_url.split("youtu.be/")[1].split("?")[0]
+                
+                if video_id:
+                    inv_res = requests.get(f"https://invidious.projectsegfau.lt/api/v1/videos/{video_id}", timeout=5)
+                    if inv_res.status_code == 200:
+                        inv_data = inv_res.json()
+                        title = inv_data.get('title', 'Unknown Title')
+                        for stream in inv_data.get('adaptiveFormats', []):
+                            if 'audio' in stream.get('type', ''):
+                                audio_url = stream.get('url')
+                                break
+            except Exception as ex:
+                last_error = f"Fallback error: {str(ex)}"
 
         if not audio_url:
             print(f"Extraction failed. Last error: {last_error}")
