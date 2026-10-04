@@ -9,7 +9,7 @@ app = Flask(__name__)
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Roblox Piped Audio Proxy is running!", 200
+    return "Roblox Audio Proxy (v4) is running!", 200
 
 @app.route('/get-audio', methods=['POST'])
 def get_audio():
@@ -20,63 +20,37 @@ def get_audio():
 
         youtube_url = data['url']
 
-        # แยกดึง Video ID ออกมาจากลิงก์ YouTube ทุกรูปแบบ
-        video_id = None
-        if "v=" in youtube_url:
-            video_id = youtube_url.split("v=")[1].split("&")[0]
-        elif "youtu.be/" in youtube_url:
-            video_id = youtube_url.split("youtu.be/")[1].split("?")[0]
-        elif "embed/" in youtube_url:
-            video_id = youtube_url.split("embed/")[1].split("?")[0]
-            
-        if not video_id:
-            return jsonify({'success': False, 'error': 'Invalid YouTube URL'}), 400
-
-        # รายชื่อ Piped API Instances
-        piped_instances = [
-            "https://pipedapi.kavin.rocks",
-            "https://pipedapi.drgns.space",
-            "https://api.piped.projectsegfau.lt"
+        # ใช้บริการ API สำรองที่รองรับการดึงลิงก์ผ่านคลาวด์โดยตรง
+        api_endpoints = [
+            f"https://co.wuk.sh/api/json" # ถ้าตัวนี้ยังเปิด หรือเปลี่ยนเป็นตัวอื่น
         ]
+        
+        # เนื่องจาก Public API มักจะปิดตัวไว เราจะใช้การดึงผ่าน y2mate/loader ทางเลือก หรือใช้บริการ api สาธารณะที่ปลอดภัย
+        # เปลี่ยนมาใช้บริการผ่าน proxy ของสตรีมเพลงที่มีเสถียรภาพสูงแทน
+        alt_api = "https://apis.davidcyriltech.my.id/youtube/mp3?url="
 
         audio_url = None
         title = "Unknown Title"
         last_error = ""
 
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-            "Accept": "application/json"
-        }
-
-        for instance in piped_instances:
-            try:
-                res = requests.get(f"{instance}/streams/{video_id}", headers=headers, verify=False, timeout=6)
-                
-                if res.status_code == 200:
-                    # เช็กก่อนว่าเป็น JSON จริงๆ หรือไม่
-                    try:
-                        res_data = res.json()
-                    except Exception:
-                        last_error = f"Instance {instance} returned non-JSON: {res.text[:120]}"
-                        continue
-
-                    title = res_data.get('title', 'Unknown Title')
-                    audio_streams = res_data.get('audioStreams', [])
-                    
-                    if audio_streams:
-                        audio_url = audio_streams[0].get('url')
-                        if audio_url:
-                            break
-                    else:
-                        last_error = f"Instance {instance} returned no audioStreams data"
+        try:
+            res = requests.get(f"{alt_api}{youtube_url}", verify=False, timeout=8)
+            if res.status_code == 200:
+                res_data = res.json()
+                if res_data.get("status") == 200 or "success" in str(res_data).lower():
+                    # ดึงลิงก์ดาวน์โหลดเสียงจากโครงสร้างผลลัพธ์
+                    data_obj = res_data.get("result", {})
+                    audio_url = data_obj.get("download_url") or data_obj.get("link")
+                    title = data_obj.get("title", "Unknown Title")
                 else:
-                    last_error = f"Instance {instance} status {res.status_code}: {res.text[:100]}"
-            except Exception as e:
-                last_error = str(e)
-                continue
+                    last_error = f"API response format error: {res_data}"
+            else:
+                last_error = f"Alternative API returned status {res.status_code}"
+        except Exception as e:
+            last_error = str(e)
 
         if not audio_url:
-            print(f"Piped extraction failed. Last error: {last_error}")
+            print(f"Extraction failed. Last error: {last_error}")
             return jsonify({'success': False, 'error': f'Failed: {last_error}'}), 500
 
         return jsonify({
