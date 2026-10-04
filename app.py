@@ -3,7 +3,6 @@ import requests
 from flask import Flask, request, jsonify
 import urllib3
 
-# ปิดเตือนเรื่อง SSL ซีเคียวริตี้ที่ไม่จำเป็นบนคลาวด์
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 app = Flask(__name__)
@@ -21,10 +20,10 @@ def get_audio():
 
         youtube_url = data['url']
 
+        # รายชื่อ Instance ของ Cobalt ที่รองรับ API ปัจจุบัน
         cobalt_instances = [
-            "https://co.wuk.sh/api/json",
-            "https://cobalt.api.red,stone.cx",
-            "https://api.cobalt.best"
+            "https://api.cobalt.best",
+            "https://co.wuk.sh/api/json"
         ]
 
         audio_url = None
@@ -33,7 +32,8 @@ def get_audio():
 
         headers = {
             "Accept": "application/json",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
         }
         
         payload = {
@@ -44,16 +44,25 @@ def get_audio():
 
         for instance in cobalt_instances:
             try:
-                # เพิ่ม verify=False เพื่อข้ามปัญหา SSL บนเซิร์ฟเวอร์คลาวด์
                 res = requests.post(instance, json=payload, headers=headers, verify=False, timeout=6)
+                
+                # เช็กว่าสถานะผ่านและเนื้อหาเป็น JSON จริงๆ หรือไม่ก่อนแปลง
                 if res.status_code == 200:
-                    res_data = res.json()
-                    if res_data.get("status") in ["stream", "redirect", "success"]:
+                    try:
+                        res_data = res.json()
+                    except Exception:
+                        last_error = f"Instance {instance} returned non-JSON response: {res.text[:100]}"
+                        continue
+
+                    status = res_data.get("status")
+                    if status in ["stream", "redirect", "success"]:
                         audio_url = res_data.get("url")
                         break
                     elif "text" in res_data:
                         audio_url = res_data.get("text")
                         break
+                    else:
+                        last_error = f"Cobalt status: {status}, data: {res_data}"
                 else:
                     last_error = f"Cobalt returned status {res.status_code}"
             except Exception as e:
