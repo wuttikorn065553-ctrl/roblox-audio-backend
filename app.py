@@ -29,7 +29,7 @@ def get_audio():
         if not video_id:
             return jsonify({'success': False, 'error': 'Invalid YouTube URL'}), 400
 
-        # รายชื่อ Invidious Instances สำรองที่เสถียร
+        # รายชื่อ Invidious Instances สำรอง
         invidious_instances = [
             "https://invidious.perennialte.ch",
             "https://vid.puffyan.us",
@@ -39,6 +39,7 @@ def get_audio():
 
         audio_url = None
         title = "Unknown Title"
+        last_error = ""
 
         for instance in invidious_instances:
             try:
@@ -48,18 +49,21 @@ def get_audio():
                     title = vid_data.get('title', 'Unknown Title')
                     adaptive_formats = vid_data.get('adaptiveFormats', [])
                     
-                    # กรองหาลิงก์เสียงที่ดีที่สุด
                     for f in adaptive_formats:
                         if 'audio' in f.get('type', ''):
                             audio_url = f.get('url')
                             break
                     if audio_url:
                         break
-            except Exception:
+                else:
+                    last_error = f"Instance {instance} returned status {res.status_code}"
+            except Exception as e:
+                last_error = str(e)
                 continue
 
         if not audio_url:
-            return jsonify({'success': False, 'error': 'Could not extract audio stream from all instances'}), 500
+            print(f"Extraction failed. Last error: {last_error}")
+            return jsonify({'success': False, 'error': f'Failed: {last_error}'}), 500
 
         return jsonify({
             'success': True,
@@ -68,6 +72,7 @@ def get_audio():
         })
 
     except Exception as e:
+        print(f"Server Error: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 if __name__ == '__main__':
