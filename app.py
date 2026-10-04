@@ -9,7 +9,7 @@ app = Flask(__name__)
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Roblox Audio Proxy (v4) is running!", 200
+    return "Roblox Audio Proxy (v5) is running!", 200
 
 @app.route('/get-audio', methods=['POST'])
 def get_audio():
@@ -20,34 +20,46 @@ def get_audio():
 
         youtube_url = data['url']
 
-        # ใช้บริการ API สำรองที่รองรับการดึงลิงก์ผ่านคลาวด์โดยตรง
-        api_endpoints = [
-            f"https://co.wuk.sh/api/json" # ถ้าตัวนี้ยังเปิด หรือเปลี่ยนเป็นตัวอื่น
-        ]
-        
-        # เนื่องจาก Public API มักจะปิดตัวไว เราจะใช้การดึงผ่าน y2mate/loader ทางเลือก หรือใช้บริการ api สาธารณะที่ปลอดภัย
-        # เปลี่ยนมาใช้บริการผ่าน proxy ของสตรีมเพลงที่มีเสถียรภาพสูงแทน
-        alt_api = "https://apis.davidcyriltech.my.id/youtube/mp3?url="
+        # ดึง Video ID เผื่อใช้กับ API สำรองตัวอื่น
+        video_id = None
+        if "v=" in youtube_url:
+            video_id = youtube_url.split("v=")[1].split("&")[0]
+        elif "youtu.be/" in youtube_url:
+            video_id = youtube_url.split("youtu.be/")[1].split("?")[0]
 
         audio_url = None
         title = "Unknown Title"
         last_error = ""
 
-        try:
-            res = requests.get(f"{alt_api}{youtube_url}", verify=False, timeout=8)
-            if res.status_code == 200:
-                res_data = res.json()
-                if res_data.get("status") == 200 or "success" in str(res_data).lower():
-                    # ดึงลิงก์ดาวน์โหลดเสียงจากโครงสร้างผลลัพธ์
-                    data_obj = res_data.get("result", {})
-                    audio_url = data_obj.get("download_url") or data_obj.get("link")
-                    title = data_obj.get("title", "Unknown Title")
+        # รายชื่อ Public APIs ทางเลือก
+        apis = [
+            f"https://apis.davidcyriltech.my.id/youtube/mp3?url={youtube_url}",
+            f"https://api.siputzx.my.id/api/d/ytmp3?url={youtube_url}"
+        ]
+
+        for api_url in apis:
+            try:
+                res = requests.get(api_url, verify=False, timeout=8)
+                if res.status_code == 200:
+                    res_data = res.json()
+                    
+                    # ตรวจสอบโครงสร้างข้อมูลที่ส่งกลับมาจากแต่ละ API
+                    if "data" in res_data and isinstance(res_data["data"], dict):
+                        d = res_data["data"]
+                        audio_url = d.get("download") or d.get("dl") or d.get("url")
+                        title = d.get("title", "Unknown Title")
+                    elif "result" in res_data and isinstance(res_data["result"], dict):
+                        d = res_data["result"]
+                        audio_url = d.get("download_url") or d.get("link") or d.get("url")
+                        title = d.get("title", "Unknown Title")
+                        
+                    if audio_url:
+                        break
                 else:
-                    last_error = f"API response format error: {res_data}"
-            else:
-                last_error = f"Alternative API returned status {res.status_code}"
-        except Exception as e:
-            last_error = str(e)
+                    last_error = f"API returned status {res.status_code}"
+            except Exception as e:
+                last_error = str(e)
+                continue
 
         if not audio_url:
             print(f"Extraction failed. Last error: {last_error}")
