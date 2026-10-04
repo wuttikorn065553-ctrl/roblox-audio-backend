@@ -9,7 +9,7 @@ app = Flask(__name__)
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Roblox Audio Proxy (No-Bot v12) is running!", 200
+    return "Roblox Audio Cobalt Proxy (v13) is running!", 200
 
 @app.route('/get-audio', methods=['POST'])
 def get_audio():
@@ -23,30 +23,40 @@ def get_audio():
         title = "Unknown Title"
         last_error = ""
 
-        # ใช้ Endpoint ทางเลือกสำหรับแปลงลิงก์เพลงผ่านระบบคลาวด์ภายนอกที่เลี่ยงบอทได้
-        api_endpoints = [
-            f"https://deliriussapi-oficial.vercel.app/download/ytmp3?url={youtube_url}",
-            f"https://api.siputzx.my.id/api/d/ytmp3?url={youtube_url}"
-        ]
+        # ใช้ Cobalt API รุ่นมาตรฐานพร้อมระบุ Origin และ User-Agent ให้ถูกต้อง
+        cobalt_url = "https://api.cobalt.tools/api/json"
+        
+        payload = {
+            "url": youtube_url,
+            "downloadMode": "audio"
+        }
 
-        for api_url in api_endpoints:
-            try:
-                res = requests.get(api_url, verify=False, timeout=10)
-                if res.status_code == 200:
-                    if "application/json" in res.headers.get("Content-Type", ""):
-                        res_data = res.json()
-                        d = res_data.get("data") or res_data.get("result") or res_data
-                        if isinstance(d, dict):
-                            audio_url = d.get("download") or d.get("dl") or d.get("url") or d.get("download_url")
-                            title = d.get("title", "Unknown Title")
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Origin": "https://cobalt.tools",
+            "Referer": "https://cobalt.tools/"
+        }
+
+        try:
+            res = requests.post(cobalt_url, json=payload, headers=headers, verify=False, timeout=10)
+            if res.status_code == 200:
+                res_data = res.json()
+                status = res_data.get("status")
+                
+                if status in ["stream", "redirect", "picker"]:
+                    audio_url = res_data.get("url")
+                    title = res_data.get("filename", "Unknown Title")
                     
-                    if audio_url:
-                        break
+                    if not audio_url and "picker" in res_data and len(res_data["picker"]) > 0:
+                        audio_url = res_data["picker"][0].get("url")
                 else:
-                    last_error = f"API status {res.status_code}"
-            except Exception as e:
-                last_error = str(e)
-                continue
+                    last_error = res_data.get("text", f"Cobalt status: {status}")
+            else:
+                last_error = f"API returned status {res.status_code}"
+        except Exception as e:
+            last_error = str(e)
 
         if not audio_url:
             print(f"Extraction failed. Last error: {last_error}")
