@@ -9,7 +9,7 @@ app = Flask(__name__)
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Roblox Audio Proxy (Safe JSON) is running!", 200
+    return "Roblox Audio Proxy (Stable v10) is running!", 200
 
 @app.route('/get-audio', methods=['POST'])
 def get_audio():
@@ -19,51 +19,32 @@ def get_audio():
             return jsonify({'success': False, 'error': 'Missing youtube url'}), 400
 
         youtube_url = data['url']
-
-        video_id = None
-        if "v=" in youtube_url:
-            video_id = youtube_url.split("v=")[1].split("&")[0]
-        elif "youtu.be/" in youtube_url:
-            video_id = youtube_url.split("youtu.be/")[1].split("?")[0]
-        elif "embed/" in youtube_url:
-            video_id = youtube_url.split("embed/")[1].split("?")[0]
-
-        if not video_id:
-            return jsonify({'success': False, 'error': 'Invalid YouTube URL'}), 400
-
-        instances = [
-            "https://vid.priv.au",
-            "https://invidious.projectsegfau.lt",
-            "https://iv.datura.network"
-        ]
-
         audio_url = None
         title = "Unknown Title"
         last_error = ""
 
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-        }
+        # ใช้บริการดึงลิงก์ผ่าน API สาธารณะที่อัปเดตสตรีมตรง
+        api_endpoints = [
+            f"https://deliriussapi-oficial.vercel.app/download/ytmp3?url={youtube_url}",
+            f"https://api.siputzx.my.id/api/d/ytmp3?url={youtube_url}"
+        ]
 
-        for instance in instances:
+        for api_url in api_endpoints:
             try:
-                res = requests.get(f"{instance}/api/v1/videos/{video_id}", headers=headers, verify=False, timeout=6)
-                
-                # เช็คว่าสถานะ 200 และเนื้อหาไม่ใช่ HTML (ป้องกันหน้าเว็บ error แจ้ง JSONDecodeError)
+                res = requests.get(api_url, verify=False, timeout=8)
                 if res.status_code == 200 and "application/json" in res.headers.get("Content-Type", ""):
                     res_data = res.json()
-                    title = res_data.get('title', 'Unknown Title')
                     
-                    adaptive_streams = res_data.get('adaptiveFormats', [])
-                    for stream in adaptive_streams:
-                        if 'audio' in stream.get('type', ''):
-                            audio_url = stream.get('url')
-                            break
-                    
+                    # แกะโครงสร้างข้อมูลตามรูปแบบมาตรฐาน
+                    d = res_data.get("data") or res_data.get("result") or res_data
+                    if isinstance(d, dict):
+                        audio_url = d.get("download") or d.get("dl") or d.get("url") or d.get("download_url")
+                        title = d.get("title", "Unknown Title")
+                        
                     if audio_url:
                         break
                 else:
-                    last_error = f"Instance {instance} returned non-json or status {res.status_code}"
+                    last_error = f"API returned status {res.status_code}"
             except Exception as e:
                 last_error = str(e)
                 continue
