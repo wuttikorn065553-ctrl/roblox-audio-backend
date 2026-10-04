@@ -7,6 +7,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 app = Flask(__name__)
 
+@app.route('/', methods('/', methods=['GET']) # type: ignore
 @app.route('/', methods=['GET'])
 def home():
     return "Roblox Cobalt Audio Proxy is running!", 200
@@ -20,15 +21,8 @@ def get_audio():
 
         youtube_url = data['url']
 
-        # รายชื่อ Instance ของ Cobalt ที่รองรับ API ปัจจุบัน
-        cobalt_instances = [
-            "https://api.cobalt.best",
-            "https://co.wuk.sh/api/json"
-        ]
-
-        audio_url = None
-        title = "Unknown Title"
-        last_error = ""
+        # ใช้ Endpoint หลักของ Cobalt ที่ยังใช้งานได้
+        cobalt_url = "https://api.cobalt.best/"
 
         headers = {
             "Accept": "application/json",
@@ -42,32 +36,30 @@ def get_audio():
             "audioFormat": "mp3"
         }
 
-        for instance in cobalt_instances:
-            try:
-                res = requests.post(instance, json=payload, headers=headers, verify=False, timeout=6)
-                
-                # เช็กว่าสถานะผ่านและเนื้อหาเป็น JSON จริงๆ หรือไม่ก่อนแปลง
-                if res.status_code == 200:
-                    try:
-                        res_data = res.json()
-                    except Exception:
-                        last_error = f"Instance {instance} returned non-JSON response: {res.text[:100]}"
-                        continue
+        audio_url = None
+        title = "Unknown Title"
+        last_error = ""
 
-                    status = res_data.get("status")
-                    if status in ["stream", "redirect", "success"]:
-                        audio_url = res_data.get("url")
-                        break
-                    elif "text" in res_data:
-                        audio_url = res_data.get("text")
-                        break
-                    else:
-                        last_error = f"Cobalt status: {status}, data: {res_data}"
+        try:
+            res = requests.post(cobalt_url, json=payload, headers=headers, verify=False, timeout=8)
+            if res.status_code == 200:
+                try:
+                    res_data = res.json()
+                except Exception:
+                    last_error = f"Non-JSON response: {res.text[:100]}"
+                    raise Exception(last_error)
+
+                status = res_data.get("status")
+                if status in ["stream", "redirect", "success"]:
+                    audio_url = res_data.get("url")
+                elif "text" in res_data:
+                    audio_url = res_data.get("text")
                 else:
-                    last_error = f"Cobalt returned status {res.status_code}"
-            except Exception as e:
-                last_error = str(e)
-                continue
+                    last_error = f"Cobalt status: {status}, data: {res_data}"
+            else:
+                last_error = f"Cobalt returned status {res.status_code}: {res.text[:100]}"
+        except Exception as e:
+            last_error = str(e)
 
         if not audio_url:
             print(f"Cobalt extraction failed. Last error: {last_error}")
