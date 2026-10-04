@@ -1,15 +1,12 @@
 import os
-import requests
 from flask import Flask, request, jsonify
-import urllib3
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+import yt_dlp
 
 app = Flask(__name__)
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Roblox Invidious Audio Proxy is running!", 200
+    return "Roblox Audio Backend (v7) is running!", 200
 
 @app.route('/get-audio', methods=['POST'])
 def get_audio():
@@ -20,64 +17,42 @@ def get_audio():
 
         youtube_url = data['url']
 
-        # แยกดึง Video ID
-        video_id = None
-        if "v=" in youtube_url:
-            video_id = youtube_url.split("v=")[1].split("&")[0]
-        elif "youtu.be/" in youtube_url:
-            video_id = youtube_url.split("youtu.be/")[1].split("?")[0]
-        elif "embed/" in youtube_url:
-            video_id = youtube_url.split("embed/")[1].split("?")[0]
-
-        if not video_id:
-            return jsonify({'success': False, 'error': 'Invalid YouTube URL'}), 400
-
-        # รายชื่อ Invidious API instances สาธารณะที่เสถียร
-        invidious_instances = [
-            "https://invidious.privacydev.net",
-            "https://iv.ggtyler.dev",
-            "https://invidious.perennialte.ch"
-        ]
-
-        audio_url = None
-        title = "Unknown Title"
-        last_error = ""
-
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+        # ตั้งค่า yt-dlp โดยใช้ client เป็น ios / tv เพื่อเลี่ยงการบล็อก IP บนคลาวด์
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'noplaylist': True,
+            'quiet': True,
+            'no_warnings': True,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['ios', 'tv', 'web']
+                }
+            }
         }
 
-        for instance in invidious_instances:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
-                res = requests.get(f"{instance}/api/v1/videos/{video_id}", headers=headers, verify=False, timeout=6)
-                if res.status_code == 200:
-                    res_data = res.json()
-                    title = res_data.get('title', 'Unknown Title')
-                    
-                    # ค้นหา adaptiveFormats ที่เป็นเสียง (audio/webm หรือ audio/mp4)
-                    adaptive_streams = res_data.get('adaptiveFormats', [])
-                    for stream in adaptive_streams:
-                        if 'audio' in stream.get('type', ''):
-                            audio_url = stream.get('url')
-                            break
-                    
-                    if audio_url:
-                        break
-                else:
-                    last_error = f"Instance {instance} returned status {res.status_code}"
+                info = ydl.extract_info(youtube_url, download=False)
             except Exception as e:
-                last_error = str(e)
-                continue
+                return jsonify({'success': False, 'error': f'yt-dlp error: {str(e)}'}), 500
 
-        if not audio_url:
-            print(f"Extraction failed. Last error: {last_error}")
-            return jsonify({'success': False, 'error': f'Failed: {last_error}'}), 500
+            title = info.get('title', 'Unknown Title')
+            audio_url = info.get('url')
 
-        return jsonify({
-            'success': True,
-            'title': title,
-            'audioUrl': audio_url
-        })
+            if not audio_url and 'formats' in info:
+                for f in info['formats']:
+                    if f.get('acodec') != 'none' and f.get('vcodec') == 'none':
+                        audio_url = f.get('url')
+                        break
+
+            if not audio_url:
+                return jsonify({'success': False, 'error': 'Could not extract audio stream URL'}), 500
+
+            return jsonify({
+                'success': True,
+                'title': title,
+                'audioUrl': audio_url
+            })
 
     except Exception as e:
         print(f"Server Error: {str(e)}")
