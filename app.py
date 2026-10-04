@@ -20,15 +20,8 @@ def get_audio():
 
         youtube_url = data['url']
 
-        # รายชื่อ Instance ของ Cobalt ที่รองรับ API JSON v1
-        cobalt_instances = [
-            "https://api.cobalt.best/api/json",
-            "https://co.wuk.sh/api/json" # เผื่อบางช่วงกลับมาออนไลน์
-        ]
-
-        audio_url = None
-        title = "Unknown Title"
-        last_error = ""
+        # ใช้ Endpoint หลักของ Cobalt ที่ใช้งานได้จริง
+        cobalt_url = "https://api.cobalt.best/api/json"
 
         headers = {
             "Accept": "application/json",
@@ -36,36 +29,45 @@ def get_audio():
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
         }
         
+        # Payload มาตรฐานของ Cobalt API
         payload = {
             "url": youtube_url,
-            "downloadMode": "audio",
             "audioFormat": "mp3"
         }
 
-        for instance in cobalt_instances:
-            try:
-                res = requests.post(instance, json=payload, headers=headers, verify=False, timeout=8)
-                if res.status_code == 200:
-                    try:
-                        res_data = res.json()
-                    except Exception:
-                        last_error = f"Instance {instance} returned non-JSON: {res.text[:100]}"
-                        continue
+        audio_url = None
+        title = "Unknown Title"
+        last_error = ""
 
-                    status = res_data.get("status")
-                    if status in ["stream", "redirect", "success"]:
-                        audio_url = res_data.get("url")
-                        break
-                    elif "text" in res_data:
-                        audio_url = res_data.get("text")
-                        break
-                    else:
-                        last_error = f"Cobalt status: {status}, data: {res_data}"
+        try:
+            res = requests.post(cobalt_url, json=payload, headers=headers, verify=False, timeout=8)
+            print(f"Cobalt Response Status: {res.status_code}")
+            print(f"Cobalt Response Body: {res.text[:200]}")
+
+            if res.status_code == 200:
+                try:
+                    res_data = res.json()
+                except Exception as json_err:
+                    last_error = f"JSON Decode Error: {str(json_err)} | Raw: {res.text[:100]}"
+                    raise Exception(last_error)
+
+                status = res_data.get("status")
+                if status in ["stream", "redirect", "success", "picker"]:
+                    # รองรับทั้งแบบส่ง url ตรงๆ หรือแบบ picker หลายเรโซลูชัน
+                    audio_url = res_data.get("url")
+                    if not audio_url and "picker" in res_data:
+                        # ถ้าเป็นแบบ picker ให้หยิบอันแรก
+                        picker = res_data.get("picker")
+                        if picker and len(picker) > 0:
+                            audio_url = picker[0].get("url")
+                elif "text" in res_data:
+                    audio_url = res_data.get("text")
                 else:
-                    last_error = f"Instance {instance} returned status {res.status_code}: {res.text[:100]}"
-            except Exception as e:
-                last_error = str(e)
-                continue
+                    last_error = f"Cobalt status: {status}, data: {res_data}"
+            else:
+                last_error = f"Cobalt returned status {res.status_code}: {res.text[:100]}"
+        except Exception as e:
+            last_error = str(e)
 
         if not audio_url:
             print(f"Cobalt extraction failed. Last error: {last_error}")
