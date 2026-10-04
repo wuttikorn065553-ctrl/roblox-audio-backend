@@ -9,7 +9,7 @@ app = Flask(__name__)
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Roblox Audio Proxy (v8) is running!", 200
+    return "Roblox Audio Cobalt Proxy is running!", 200
 
 @app.route('/get-audio', methods=['POST'])
 def get_audio():
@@ -23,30 +23,36 @@ def get_audio():
         title = "Unknown Title"
         last_error = ""
 
-        # รายชื่อ Endpoint สำรองที่ช่วยจัดการเรื่องบอทและคุกกี้ให้เรียบร้อยบนคลาวด์
-        apis = [
-            f"https://api.siputzx.my.id/api/d/ytmp3?url={youtube_url}",
-            f"https://deliriussapi-oficial.vercel.app/download/ytmp3?url={youtube_url}"
+        # ใช้บริการ Cobalt Public API สำหรับดึงลิงก์ตรง
+        cobalt_apis = [
+            "https://api.cobalt.tools/api/json"
         ]
 
-        for api_url in apis:
+        payload = {
+            "url": youtube_url,
+            "downloadMode": "audio",
+            "audioFormat": "mp3"
+        }
+
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0"
+        }
+
+        for api_url in cobalt_apis:
             try:
-                res = requests.get(api_url, verify=False, timeout=10)
+                res = requests.post(api_url, json=payload, headers=headers, verify=False, timeout=10)
                 if res.status_code == 200:
                     res_data = res.json()
-                    
-                    # แกะโครงสร้างข้อมูลตามรูปแบบของแต่ละ API
-                    if "data" in res_data and isinstance(res_data["data"], dict):
-                        d = res_data["data"]
-                        audio_url = d.get("download") or d.get("dl") or d.get("url") or d.get("download_url")
-                        title = d.get("title", "Unknown Title")
-                    elif "result" in res_data and isinstance(res_data["result"], dict):
-                        d = res_data["result"]
-                        audio_url = d.get("download") or d.get("dl") or d.get("url") or d.get("download_url")
-                        title = d.get("title", "Unknown Title")
-                        
-                    if audio_url:
+                    # โครงสร้างของ Cobalt API
+                    status = res_data.get("status")
+                    if status == "stream" or status == "redirect" or status == "picker":
+                        audio_url = res_data.get("url")
+                        title = res_data.get("filename", "Unknown Title")
                         break
+                    elif status == "error":
+                        last_error = res_data.get("text", "Cobalt error")
                 else:
                     last_error = f"API returned status {res.status_code}"
             except Exception as e:
