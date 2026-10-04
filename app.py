@@ -17,7 +17,6 @@ def get_audio():
 
         youtube_url = data['url']
 
-        # เพิ่ม player_client เป็น android เพื่อเลี่ยงการบล็อกบนคลาวด์
         ydl_opts = {
             'format': 'bestaudio/best',
             'noplaylist': True,
