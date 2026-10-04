@@ -17,12 +17,13 @@ def get_audio():
 
         youtube_url = data['url']
 
-        # ตั้งค่า yt-dlp ให้กระจาย client เพื่อเลี่ยงการบล็อกของ YouTube บนคลาวด์
+        # ตั้งค่า yt-dlp พร้อมดึงไฟล์คุกกี้เพื่อเลี่ยงการบล็อกบนคลาวด์
         ydl_opts = {
             'format': 'bestaudio/best',
             'noplaylist': True,
             'quiet': True,
             'no_warnings': True,
+            'cookiefile': 'youtube.com_cookies.txt',  # ไฟล์คุกกี้ที่เรานำมาใส่ไว้
             'extractor_args': {
                 'youtube': {
                     'player_client': ['android', 'ios', 'web']
