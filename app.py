@@ -17,16 +17,22 @@ def get_audio():
 
         youtube_url = data['url']
 
-        # ตั้งค่า yt-dlp พร้อมดึงไฟล์คุกกี้เพื่อเลี่ยงการบล็อกบนคลาวด์
+        # ตั้งค่า yt-dlp พร้อมคุกกี้และจำลอง User-Agent ของเบราว์เซอร์จริงเพื่อเลี่ยงการบล็อก
         ydl_opts = {
             'format': 'bestaudio/best',
             'noplaylist': True,
             'quiet': True,
             'no_warnings': True,
-            'cookiefile': 'youtube.com_cookies.txt',  # ไฟล์คุกกี้ที่เรานำมาใส่ไว้
+            'cookiefile': 'youtube.com_cookies.txt',
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-us,en;q=0.5',
+                'Sec-Fetch-Mode': 'navigate',
+            },
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android', 'ios', 'web']
+                    'player_client': ['web', 'android']
                 }
             }
         }
