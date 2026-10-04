@@ -7,7 +7,6 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 app = Flask(__name__)
 
-@app.route('/', methods('/', methods=['GET']) # type: ignore
 @app.route('/', methods=['GET'])
 def home():
     return "Roblox Cobalt Audio Proxy is running!", 200
@@ -21,7 +20,6 @@ def get_audio():
 
         youtube_url = data['url']
 
-        # ใช้ Endpoint หลักของ Cobalt ที่ยังใช้งานได้
         cobalt_url = "https://api.cobalt.best/"
 
         headers = {
