@@ -32,11 +32,11 @@ def get_audio():
         if not video_id:
             return jsonify({'success': False, 'error': 'Invalid YouTube URL'}), 400
 
-        # ใช้ Piped API Instances ซึ่งรองรับการดึงสตรีมเสียงผ่านคลาวด์ได้ดีกว่า
+        # รายชื่อ Piped API Instances ที่เสถียรและใช้งานได้ดี
         piped_instances = [
             "https://pipedapi.kavin.rocks",
-            "https://piped-api.garudalinux.org",
-            "https://api.piped.privacy.com.de"
+            "https://pipedapi.drgns.space",
+            "https://api.piped.projectsegfau.lt"
         ]
 
         audio_url = None
