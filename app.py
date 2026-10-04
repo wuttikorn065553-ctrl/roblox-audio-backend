@@ -13,13 +13,16 @@ def get_audio():
     try:
         data = request.get_json()
         if not data or 'url' not in data:
-            return jsonify({'error': 'Missing youtube url'}), 400
+            return jsonify({'success': False, 'error': 'Missing youtube url'}), 400
 
         youtube_url = data['url']
 
+        # ตั้งค่า yt-dlp ให้รองรับการดึงข้อมูลที่เสถียรขึ้น
         ydl_opts = {
             'format': 'bestaudio/best',
             'noplaylist': True,
+            'quiet': True,
+            'no_warnings': True,
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -28,7 +31,7 @@ def get_audio():
             title = info.get('title', 'Unknown Title')
 
         if not audio_url:
-            return jsonify({'error': 'Could not extract audio stream'}), 500
+            return jsonify({'success': False, 'error': 'Could not extract audio stream'}), 500
 
         return jsonify({
             'success': True,
@@ -37,6 +40,8 @@ def get_audio():
         })
 
     except Exception as e:
+        # พิมพ์ Error ลงใน Console ของ Render เพื่อให้เราเช็คได้ง่ายขึ้น
+        print(f"Error extracting audio: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 if __name__ == '__main__':
