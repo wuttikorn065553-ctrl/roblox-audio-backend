@@ -9,7 +9,7 @@ app = Flask(__name__)
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Roblox Audio Cobalt Proxy (v13) is running!", 200
+    return "Roblox Audio Multi-Cobalt Proxy (v14) is running!", 200
 
 @app.route('/get-audio', methods=['POST'])
 def get_audio():
@@ -23,9 +23,12 @@ def get_audio():
         title = "Unknown Title"
         last_error = ""
 
-        # ใช้ Cobalt API รุ่นมาตรฐานพร้อมระบุ Origin และ User-Agent ให้ถูกต้อง
-        cobalt_url = "https://api.cobalt.tools/api/json"
-        
+        # รายชื่อ Instance สำรองของ Cobalt และ API Gateway ทางเลือก
+        endpoints = [
+            "https://api.cobalt.tools/api/json",
+            "https://co.wuk.sh/api/json"
+        ]
+
         payload = {
             "url": youtube_url,
             "downloadMode": "audio"
@@ -39,24 +42,29 @@ def get_audio():
             "Referer": "https://cobalt.tools/"
         }
 
-        try:
-            res = requests.post(cobalt_url, json=payload, headers=headers, verify=False, timeout=10)
-            if res.status_code == 200:
-                res_data = res.json()
-                status = res_data.get("status")
-                
-                if status in ["stream", "redirect", "picker"]:
-                    audio_url = res_data.get("url")
-                    title = res_data.get("filename", "Unknown Title")
+        for endpoint in endpoints:
+            try:
+                res = requests.post(endpoint, json=payload, headers=headers, verify=False, timeout=8)
+                if res.status_code == 200:
+                    res_data = res.json()
+                    status = res_data.get("status")
                     
-                    if not audio_url and "picker" in res_data and len(res_data["picker"]) > 0:
-                        audio_url = res_data["picker"][0].get("url")
+                    if status in ["stream", "redirect", "picker"]:
+                        audio_url = res_data.get("url")
+                        title = res_data.get("filename", "Unknown Title")
+                        
+                        if not audio_url and "picker" in res_data and len(res_data["picker"]) > 0:
+                            audio_url = res_data["picker"][0].get("url")
+                    else:
+                        last_error = res_data.get("text", f"Status: {status}")
+                        
+                    if audio_url:
+                        break
                 else:
-                    last_error = res_data.get("text", f"Cobalt status: {status}")
-            else:
-                last_error = f"API returned status {res.status_code}"
-        except Exception as e:
-            last_error = str(e)
+                    last_error = f"API returned status {res.status_code}"
+            except Exception as e:
+                last_error = str(e)
+                continue
 
         if not audio_url:
             print(f"Extraction failed. Last error: {last_error}")
